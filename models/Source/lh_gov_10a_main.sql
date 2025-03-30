@@ -1,0 +1,1 @@
+SELECT * FROM [LH_EUROSTAT].[PublicFinance].[gov_10a_main]
