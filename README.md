@@ -1,7 +1,3 @@
-Below is a sample **README.md** you could include in your GitHub repository. It explains the context, dependencies, and how to run the project. Feel free to adjust wording or formatting as desired.
-
----
-
 # Fabric Eurostat DBT Project
 
 This repo demonstrates using [dbt](https://www.getdbt.com/) with Microsoft Fabric to transform data from Eurostat. It draws heavily on:
