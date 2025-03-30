@@ -1,1 +1,1 @@
-SELECT * FROM [DWH_Eurostat].[dbo].[dim_na_item]
+SELECT * FROM {{ ('dim_geo') }}
