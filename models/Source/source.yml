@@ -64,9 +64,38 @@ models:
         tests:
           - unique
           - not_null
-      - name: country_code
+      - name: na_code
         data_type: string
-      - name: country
+      - name: na_label
         data_type: string
 
+  - name: lh_sector
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: pk
+        data_type: integer
+        tests:
+          - unique
+          - not_null
+      - name: sector_code
+        data_type: string
+      - name: sector_label
+        data_type: string
+
+  - name: lh_unit
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: pk
+        data_type: integer
+        tests:
+          - unique
+          - not_null
+      - name: unit_code
+        data_type: string
+      - name: unit_label
+        data_type: string
 
