@@ -10,15 +10,11 @@
 {% set default_null_value = '' %}
 {% set delimiter = '|' %}
 
-{# For each field, we produce e.g. COALESCE(field, '') #}
 {% set expression_parts = [] %}
 {% for field in field_list %}
-    {% do expression_parts.append("COALESCE(" ~ field ~ ", '" ~ default_null_value ~ "')") %}
+    {% do expression_parts.append("COALESCE(CAST(" ~ field ~ " AS CHAR), '" ~ default_null_value ~ "')") %}
 {% endfor %}
 
-{# Join them with " + '|' + " so it becomes:
-   COALESCE(field1, '') + '|' + COALESCE(field2, '') + '|' ...
-#}
 {% set combined_expression = expression_parts | join(" + '" ~ delimiter ~ "' + ") %}
 
 {# 2. Return the T-SQL snippet that does the hashing #}
@@ -30,5 +26,12 @@ ABS(
       8
     ) AS BIGINT
   )
-) % CAST(POWER(10, {{ max_digits }}) as BIGINT)
+)
+% CAST(
+    POWER(
+      CAST(10 AS DECIMAL(38,0)), 
+      {{ max_digits }}
+    ) 
+    AS BIGINT
+  )
 {% endmacro %}
