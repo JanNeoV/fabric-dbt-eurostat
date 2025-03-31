@@ -24,6 +24,8 @@ models:
     Source:
       +schema: "Source"
       +create_schema: false
+      +materialized: table
+
     Staging:
       +schema: "Staging"
       +create_schema: false
