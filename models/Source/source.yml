@@ -1,0 +1,7 @@
+models:
+  - name: lh_freq
+    columns:
+      - name: dimension_code
+        data_type: integer
+      - name: dimension_label
+        data_type: string
