@@ -60,7 +60,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -99,3 +99,25 @@ models:
       - name: unit_label
         data_type: string
 
+  - name: seed_na_item_hierachy
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: pk
+        data_type: integer
+        tests:
+          - unique
+          - not_null
+      - name: LEVEL_1
+        data_type: string
+      - name: LEVEL_1_DESCRIPTION
+        data_type: string
+      - name: LEVEL_2
+        data_type: string
+      - name: LEVEL_2_DESCRIPTION
+        data_type: string
+      - name: LEVEL_3
+        data_type: string
+      - name: LEVEL_3_DESCRIPTION
+        data_type: string

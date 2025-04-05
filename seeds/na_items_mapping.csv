@@ -1,0 +1,44 @@
+LEVEL_1,LEVEL_1_DESCRIPTION,LEVEL_2,LEVEL_2_DESCRIPTION,LEVEL_3,LEVEL_3_DESCRIPTION
+TR,Total general government revenue,P11_P12_P131,"Market output, output for own final use and payments for non-market output",P131,Payments for non-market output
+TR,Total general government revenue,P11_P12_P131,"Market output, output for own final use and payments for non-market output",P12,Output for own final use
+TR,Total general government revenue,P11_P12_P131,"Market output, output for own final use and payments for non-market output",P11,Market output
+TR,Total general government revenue,D9REC,"Capital transfers, revenue",D99REC,"Other capital transfers, revenue"
+TE,Total general government expenditure,D9PAY,"Capital transfers, expenditure",D99PAY,"Other capital transfers, expenditure"
+TR,Total general government revenue,D9REC,"Capital transfers, revenue",D92REC,"Investment grants, revenue"
+TE,Total general government expenditure,D9PAY,"Capital transfers, expenditure",D92PAY,"Investment grants, expenditure"
+TR,Total general government revenue,D9REC,"Capital transfers, revenue",D91REC,"Capital taxes, revenue"
+TR,Total general government revenue,D7REC,"Other current transfers, revenue",D76REC,"VAT- and GNI-based EU own resources, revenue"
+TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D76PAY,"VAT- and GNI-based EU own resources , expenditure"
+TR,Total general government revenue,D7REC,"Other current transfers, revenue",D75REC,"Miscellaneous current transfers, revenue"
+TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D75PAY,"Miscellaneous current transfers , expenditure"
+TR,Total general government revenue,D7REC,"Other current transfers, revenue",D74REC,"Current international cooperation, revenue"
+TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D74PAY,"Current international cooperation, , expenditure"
+TR,Total general government revenue,D7REC,"Other current transfers, revenue",D73REC,"Current transfers within general government, revenue"
+TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D73PAY,"Current transfers within general government , expenditure"
+TR,Total general government revenue,D7REC,"Other current transfers, revenue",D72REC,"Non-life insurance claims, revenue"
+TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D72PAY,"Non-life insurance claims , expenditure"
+TR,Total general government revenue,D7REC,"Other current transfers, revenue",D71REC,"Net non-life insurance premiums, revenue"
+TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D71PAY,"Net non-life insurance premiums , expenditure"
+TR,Total general government revenue,D61REC,"Net social contributions, revenue",D613REC,"Households' actual social contributions, revenue"
+TR,Total general government revenue,D61REC,"Net social contributions, revenue",D611REC,"Employers' actual social contributions, revenue"
+TE,Total general government expenditure,D5PAY,"Current taxes on income, wealth, etc., expenditure",D5PAY,"Current taxes on income, wealth, etc., expenditure"
+TE,Total general government expenditure,D4PAY,"Property income, expenditure",D45PAY,"Rent, expenditure"
+TE,Total general government expenditure,D4PAY,"Property income, expenditure",D44PAY,"Other investment income, expenditure"
+TE,Total general government expenditure,D4PAY,"Property income, expenditure",D43PAY,"Reinvested earnings on foreign direct investment, expenditure"
+TR,Total general government revenue,D4REC,"Property income, revenue",D42REC,"Distributed income of corporations, revenue"
+TE,Total general government expenditure,D4PAY,"Property income, expenditure",D42PAY,"Distributed income of corporations, expenditure"
+TR,Total general government revenue,D4REC,"Property income, revenue",D41REC,"Interest, revenue"
+TE,Total general government expenditure,D4PAY,"Property income, expenditure",D41PAY,"Interest, expenditure"
+TE,Total general government expenditure,D3PAY,"Subsidies, expenditure",D39PAY,"Other subsidies on production, expenditure"
+TE,Total general government expenditure,D3PAY,"Subsidies, expenditure",D31PAY,"Subsidies on products, expenditure"
+TR,Total general government revenue,D2REC,"Taxes on production and imports, revenue",D29REC,"Other taxes on production, revenue"
+TR,Total general government revenue,D2REC,"Taxes on production and imports, revenue",D21REC,"Taxes on products, revenue"
+TR,Total general government revenue,D8,Adjustment for the change in pension entitlements,,null
+TE,Total general government expenditure,D8,Adjustment for the change in pension entitlements,,null
+TE,Total general government expenditure,D62_D632PAY,"Social benefits other than social transfers in kind and social transfers in kind - purchased market production, expenditure",,null
+B9,Net lending (+)/net borrowing (-),,null,,null
+TR,Total general government revenue,D5REC,"Current taxes on income, wealth, etc., revenue",,null
+TR,Total general government revenue,D39REC,"Other subsidies on production, revenue",,null
+TE,Total general government expenditure,OP5ANP,Gross capital formation and acquisitions less disposals of non-financial non-produced assets,,null
+TE,Total general government expenditure,P2,Intermediate consumption,,null
+TE,Total general government expenditure,D29PAY,"Other taxes on production, expenditure",,null

@@ -19,6 +19,12 @@ clean-targets:
 
 require-dbt-version: [">=1.0.0", "<2.0.0"]
 
+seeds:
+  fabric_eurostat:
+    +enabled: true
+    +schema: "Source"
+    # This configures seeds/country_codes.csv
+
 models:
   fabric_eurostat:
     Source:
