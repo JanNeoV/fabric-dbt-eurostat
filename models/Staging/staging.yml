@@ -32,12 +32,28 @@ models:
         # FKs
       - name: fk_unit
         data_type: integer
+        tests:
+          - relationships:
+              to: ref('dim_unit')
+              field: pk
       - name: fk_sector
         data_type: integer
+        tests:
+          - relationships:
+              to: ref('dim_sector')
+              field: pk
       - name: fk_national_accounts
         data_type: integer
+        tests:
+          - relationships:
+              to: ref('dim_national_accounts')
+              field: pk
       - name: fk_geo
         data_type: integer
+        tests:
+          - relationships:
+              to: ref('dim_geo')
+              field: pk
 
   - name: dim_sector
     config:

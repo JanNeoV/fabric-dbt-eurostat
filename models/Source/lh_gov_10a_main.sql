@@ -1,6 +1,6 @@
 SELECT 
     {{ generate_tsql_surrogate_key_integer(
-        ["na_item", "geo", "time", "value", "unit"], 20) }} AS pk
+        ["sector", "na_item", "geo", "time", "value", "unit"], 17) }} AS pk
     , freq
     , unit
     , sector

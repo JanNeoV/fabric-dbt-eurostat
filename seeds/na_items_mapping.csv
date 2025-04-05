@@ -33,7 +33,6 @@ TE,Total general government expenditure,D3PAY,"Subsidies, expenditure",D39PAY,"O
 TE,Total general government expenditure,D3PAY,"Subsidies, expenditure",D31PAY,"Subsidies on products, expenditure"
 TR,Total general government revenue,D2REC,"Taxes on production and imports, revenue",D29REC,"Other taxes on production, revenue"
 TR,Total general government revenue,D2REC,"Taxes on production and imports, revenue",D21REC,"Taxes on products, revenue"
-TR,Total general government revenue,D8,Adjustment for the change in pension entitlements,,null
 TE,Total general government expenditure,D8,Adjustment for the change in pension entitlements,,null
 TE,Total general government expenditure,D62_D632PAY,"Social benefits other than social transfers in kind and social transfers in kind - purchased market production, expenditure",,null
 B9,Net lending (+)/net borrowing (-),,null,,null
