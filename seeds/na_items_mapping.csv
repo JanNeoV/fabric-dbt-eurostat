@@ -19,24 +19,24 @@ TR,Total general government revenue,D7REC,"Other current transfers, revenue",D72
 TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D72PAY,"Non-life insurance claims , expenditure"
 TR,Total general government revenue,D7REC,"Other current transfers, revenue",D71REC,"Net non-life insurance premiums, revenue"
 TE,Total general government expenditure,D7PAY,"Other current transfers, expenditure",D71PAY,"Net non-life insurance premiums , expenditure"
-TR,Total general government revenue,D61REC,"Net social contributions, revenue",D613REC,"Households' actual social contributions, revenue"
-TR,Total general government revenue,D61REC,"Net social contributions, revenue",D611REC,"Employers' actual social contributions, revenue"
+TR,Total general government revenue,D61REC,"Net social contributions, revenue",,null
 TE,Total general government expenditure,D5PAY,"Current taxes on income, wealth, etc., expenditure",D5PAY,"Current taxes on income, wealth, etc., expenditure"
-TE,Total general government expenditure,D4PAY,"Property income, expenditure",D45PAY,"Rent, expenditure"
-TE,Total general government expenditure,D4PAY,"Property income, expenditure",D44PAY,"Other investment income, expenditure"
-TE,Total general government expenditure,D4PAY,"Property income, expenditure",D43PAY,"Reinvested earnings on foreign direct investment, expenditure"
+TR,Total general government revenue,D4REC,"Property income, revenue",D45REC,"Rent, revenue"
+TR,Total general government revenue,D4REC,"Property income, revenue",D44REC,"Other investment income, revenue"
+TR,Total general government revenue,D4REC,"Property income, revenue",D43REC,"Reinvested earnings on foreign direct investment, revenue"
 TR,Total general government revenue,D4REC,"Property income, revenue",D42REC,"Distributed income of corporations, revenue"
-TE,Total general government expenditure,D4PAY,"Property income, expenditure",D42PAY,"Distributed income of corporations, expenditure"
 TR,Total general government revenue,D4REC,"Property income, revenue",D41REC,"Interest, revenue"
-TE,Total general government expenditure,D4PAY,"Property income, expenditure",D41PAY,"Interest, expenditure"
+TE,Total general government expenditure,D4PAY,"Property income, expenditure",,null
 TE,Total general government expenditure,D3PAY,"Subsidies, expenditure",D39PAY,"Other subsidies on production, expenditure"
 TE,Total general government expenditure,D3PAY,"Subsidies, expenditure",D31PAY,"Subsidies on products, expenditure"
 TR,Total general government revenue,D2REC,"Taxes on production and imports, revenue",D29REC,"Other taxes on production, revenue"
 TR,Total general government revenue,D2REC,"Taxes on production and imports, revenue",D21REC,"Taxes on products, revenue"
+TE,Total general government expenditure,D1PAY,"Compensation of employees, expenditure",D12PAY,"Employers' social contributions, expenditures"
+TE,Total general government expenditure,D1PAY,"Compensation of employees, expenditure",D11PAY,"Wages and salaries, expenditure"
 TE,Total general government expenditure,D8,Adjustment for the change in pension entitlements,,null
 TE,Total general government expenditure,D62_D632PAY,"Social benefits other than social transfers in kind and social transfers in kind - purchased market production, expenditure",,null
-B9,Net lending (+)/net borrowing (-),,null,,null
 TR,Total general government revenue,D5REC,"Current taxes on income, wealth, etc., revenue",,null
+B9,Net lending (+)/net borrowing (-),,null,,null
 TR,Total general government revenue,D39REC,"Other subsidies on production, revenue",,null
 TE,Total general government expenditure,OP5ANP,Gross capital formation and acquisitions less disposals of non-financial non-produced assets,,null
 TE,Total general government expenditure,P2,Intermediate consumption,,null

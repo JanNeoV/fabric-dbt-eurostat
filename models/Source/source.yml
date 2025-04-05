@@ -5,7 +5,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -20,7 +20,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -75,7 +75,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -90,7 +90,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -105,7 +105,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -120,4 +120,6 @@ models:
       - name: LEVEL_3
         data_type: string
       - name: LEVEL_3_DESCRIPTION
+        data_type: string
+      - name: helper_mapping
         data_type: string

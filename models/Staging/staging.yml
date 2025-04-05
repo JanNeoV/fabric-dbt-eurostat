@@ -6,7 +6,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -31,25 +31,25 @@ models:
         data_type: bigint
         # FKs
       - name: fk_unit
-        data_type: integer
+        data_type: bigint
         tests:
           - relationships:
-              to: ref('dim_unit')
+              to: ref('dim_units')
               field: pk
       - name: fk_sector
-        data_type: integer
+        data_type: bigint
         tests:
           - relationships:
               to: ref('dim_sector')
               field: pk
       - name: fk_national_accounts
-        data_type: integer
+        data_type: bigint
         tests:
           - relationships:
               to: ref('dim_national_accounts')
               field: pk
       - name: fk_geo
-        data_type: integer
+        data_type: bigint
         tests:
           - relationships:
               to: ref('dim_geo')
@@ -61,7 +61,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -70,13 +70,13 @@ models:
       - name: sector_label
         data_type: string
 
-  - name: dim_unit
+  - name: dim_units
     config:
       contract:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null
@@ -91,7 +91,7 @@ models:
         enforced: true
     columns:
       - name: pk
-        data_type: integer
+        data_type: bigint
         tests:
           - unique
           - not_null

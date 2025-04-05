@@ -35,6 +35,8 @@ models:
     Staging:
       +schema: "Staging"
       +create_schema: false
+      +materialized: table
+      
     Mart:
       +schema: "Mart"
       +create_schema: false

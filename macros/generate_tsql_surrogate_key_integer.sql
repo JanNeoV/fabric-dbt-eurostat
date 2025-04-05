@@ -3,10 +3,11 @@
   Creates a deterministic integer (up to max_digits) by:
    1) Coalescing fields to '' and joining with '|'.
    2) Hashing via HASHBYTES('MD5', ...).
-   3) Taking the first 8 bytes => BIGINT => ABS => mod 10^max_digits.
+   3) Taking the first 8 bytes => BIGINT.
+   4) Handling the minimum BIGINT value to avoid ABS() overflow.
+   5) Taking the absolute value and modulo.
 #}
 
-{# 1. Build a Jinja expression that merges fields into one string #}
 {% set default_null_value = '' %}
 {% set delimiter = '|' %}
 
@@ -17,21 +18,14 @@
 
 {% set combined_expression = expression_parts | join(" + '" ~ delimiter ~ "' + ") %}
 
-{# 2. Return the T-SQL snippet that does the hashing #}
-ABS(
-  CAST(
-    SUBSTRING(
-      HASHBYTES('MD5', {{ combined_expression }}),
-      1,
-      8
-    ) AS BIGINT
-  )
-)
-% CAST(
-    POWER(
-      CAST(10 AS DECIMAL(38,0)), 
-      {{ max_digits }}
-    ) 
-    AS BIGINT
-  )
+CASE 
+    WHEN CAST(SUBSTRING(HASHBYTES('MD5', {{ combined_expression }}), 1, 8) AS BIGINT) = -9223372036854775808 
+    THEN CONVERT(BIGINT, (
+        (9223372036854775807) % CONVERT(BIGINT, POWER(CONVERT(DECIMAL(38,0), 10), {{ max_digits }}))
+    ))
+    ELSE CONVERT(BIGINT, (
+        ABS(CAST(SUBSTRING(HASHBYTES('MD5', {{ combined_expression }}), 1, 8) AS BIGINT))
+        % CONVERT(BIGINT, POWER(CONVERT(DECIMAL(38,0), 10), {{ max_digits }}))
+    ))
+END
 {% endmacro %}
