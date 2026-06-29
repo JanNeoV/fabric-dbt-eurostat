@@ -1,17 +1,18 @@
-name: 'fabric_eurostat'
+name: 'triathlon_analytics'
 
 config-version: 2
 version: '0.1'
 
-profile: 'fabric'
+profile: 'pbi_sf_trial'
 
 model-paths: ["models"]
-seed-paths: ["seeds"]
+seed-paths: []
 test-paths: ["tests"]
 analysis-paths: ["analysis"]
 macro-paths: ["macros"]
 
 target-path: "target"
+packages-install-path: "target/dbt_packages"
 clean-targets:
     - "target"
     - "dbt_modules"
@@ -19,24 +20,30 @@ clean-targets:
 
 require-dbt-version: [">=1.0.0", "<2.0.0"]
 
-seeds:
-  fabric_eurostat:
-    +enabled: true
-    +schema: "Source"
-    # This configures seeds/country_codes.csv
+vars:
+  reconciliation_limit_seconds: 300
+  possible_context_hard_rate: 0.30
+  consistency_spread_threshold: 0.70
+  model_z_threshold: 3.5
+  extreme_transition_limit_seconds: 1800
+  swim_min_kmh: 1.5
+  swim_max_kmh: 6.5
+  bike_min_kmh: 15
+  bike_max_kmh: 65
+  run_min_kmh: 5
+  run_max_kmh: 25
 
 models:
-  fabric_eurostat:
+  triathlon_analytics:
     Source:
-      +schema: "Source"
-      +create_schema: false
+      +schema: source
       +materialized: table
-
-    Staging:
-      +schema: "Staging"
-      +create_schema: false
+    staging:
+      +schema: staging
       +materialized: table
-      
-    Mart:
-      +schema: "Mart"
-      +create_schema: false
+    intermediate:
+      +schema: intermediate
+      +materialized: table
+    marts:
+      +schema: mart
+      +materialized: table

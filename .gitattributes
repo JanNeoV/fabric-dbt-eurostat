@@ -1,0 +1,13 @@
+*.cmd text eol=crlf
+*.json text eol=lf
+*.md text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.sql text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.gitignore text eol=lf
+semantic_poc/output/*.json text eol=lf
+semantic_poc/output/*.yml text eol=lf
+semantic_poc/output/*.md text eol=lf

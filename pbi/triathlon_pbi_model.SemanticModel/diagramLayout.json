@@ -1,0 +1,131 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 0,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 30.990573369396316,
+            "y": 765.59694756189219
+          },
+          "nodeIndex": "fct_review_flag",
+          "size": {
+            "height": 279,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 583.2188427319179,
+            "y": 751.529097338162
+          },
+          "nodeIndex": "fct_result",
+          "size": {
+            "height": 364,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1203.8264734065217,
+            "y": 741.02142647216033
+          },
+          "nodeIndex": "fct_event_leg_context",
+          "size": {
+            "height": 272,
+            "width": 346
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 0,
+            "y": 154.63699478133174
+          },
+          "nodeIndex": "dim_review_flag",
+          "size": {
+            "height": 224,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 241.81438668904843,
+            "y": 72.0642794164811
+          },
+          "nodeIndex": "dim_gender",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 956.16676001235464,
+            "y": 153.5885263012529
+          },
+          "nodeIndex": "dim_event",
+          "size": {
+            "height": 296,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 663.20291151941819,
+            "y": 103.508682698332
+          },
+          "nodeIndex": "dim_division",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1446.3054186474278,
+            "y": 115.74978927304687
+          },
+          "nodeIndex": "dim_distance",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1730.3054186474278,
+            "y": 493.75383543300086
+          },
+          "nodeIndex": "tri_measures",
+          "nodeLineageTag": "b6a65c5f-55db-4c4e-a01f-e02ba6341633",
+          "size": {
+            "height": 104,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "All tables",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "All tables",
+  "defaultDiagram": "All tables"
+}

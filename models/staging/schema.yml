@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_results
+    description: Standardized CoachCox race-result rows. Direct identifiers are retained only for internal keys and validation, not exposed in marts.
+    columns:
+      - name: result_id
+        description: Stable row key generated from source seed, event, name, bib, and overall time.
+        data_tests:
+          - not_null
+      - name: event_id
+        description: Event identifier parsed from the CoachCox seed filename suffix.
+        data_tests:
+          - not_null
+      - name: source_seed_name
+        description: Source batch or file-stem identifier supplied by the raw Lakehouse table.
+        data_tests:
+          - not_null
+      - name: source_file_name
+        description: Original CoachCox CSV filename that supplied the raw row.
+        data_tests:
+          - not_null
+      - name: source_row_number
+        description: One-based row number inside the original CoachCox CSV, excluding the header.
+        data_tests:
+          - not_null
+      - name: name_raw
+        description: Athlete name retained only before the mart layer.
+      - name: bib_raw
+        description: Race bib retained only before the mart layer.
+      - name: country_raw
+        description: Country retained only before the mart layer.

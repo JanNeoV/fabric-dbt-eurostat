@@ -1,0 +1,131 @@
+version: 2
+
+models:
+  - name: dim_event
+    description: One row per race event parsed from CoachCox seed metadata.
+    columns:
+      - name: event_id
+        data_tests:
+          - unique
+          - not_null
+      - name: event_has_context_flag
+        description: At least one event-leg context signal exists for the event.
+
+  - name: dim_division
+    description: One row per athlete division or age group label.
+    columns:
+      - name: division_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_gender
+    description: Gender labels used for event-relative calculations.
+    columns:
+      - name: gender_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_distance
+    description: Supported nominal race-distance definitions.
+    columns:
+      - name: distance_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_review_flag
+    description: Review flag definitions and caveats. Review flags are not accusations.
+    columns:
+      - name: review_flag_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: fct_result
+    description: One row per athlete result in one event. Direct athlete identifiers are intentionally excluded.
+    columns:
+      - name: result_id
+        data_tests:
+          - unique
+          - not_null
+      - name: event_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_event')
+                field: event_id
+      - name: division_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_division')
+                field: division_id
+      - name: gender_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_gender')
+                field: gender_id
+      - name: distance_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_distance')
+                field: distance_id
+
+  - name: fct_review_flag
+    description: Factless bridge table with one row per active result review flag.
+    columns:
+      - name: result_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_result')
+                field: result_id
+      - name: review_flag_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_review_flag')
+                field: review_flag_id
+      - name: event_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_event')
+                field: event_id
+
+  - name: fct_event_leg_context
+    description: Event-leg context fact at event, gender, and discipline grain.
+    columns:
+      - name: event_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_event')
+                field: event_id
+      - name: gender_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_gender')
+                field: gender_id
+      - name: leg
+        data_tests:
+          - not_null
+
+  - name: obt_triathlon_results
+    description: Analyst-friendly one-big-table comparison mart. It intentionally excludes athlete name, bib, and country.
+    columns:
+      - name: result_id
+        data_tests:
+          - unique
+          - not_null

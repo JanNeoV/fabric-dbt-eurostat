@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: int_result_times
+    description: Parsed timing fields and validity flags. Zero, negative, blank, and malformed times are treated as missing.
+    columns:
+      - name: result_id
+        data_tests:
+          - not_null
+      - name: overall_seconds
+        description: Parsed overall time in seconds, when valid.
+      - name: is_valid_sbr_finisher
+        description: Finisher with valid gender and complete swim-bike-run splits.
+
+  - name: int_result_percentiles
+    description: Within-event and within-gender split percentiles. Faster performances receive higher relative percentile values.
+    columns:
+      - name: result_id
+        data_tests:
+          - not_null
+      - name: consistency_spread_rel
+        description: Difference between the strongest and weakest split percentile.
+
+  - name: int_event_leg_context
+    description: Event-leg context bands showing whether nominal hard flags cluster by event, gender, and discipline.
+    columns:
+      - name: event_id
+        data_tests:
+          - not_null
+      - name: gender
+        data_tests:
+          - not_null
+      - name: leg
+        data_tests:
+          - not_null
+      - name: event_context_flag
+        description: True when the event-leg nominal hard rate meets the configured context threshold.
+
+  - name: int_review_flags
+    description: Separated review flag families. Review flags are not accusations; they are signals for data, course, or profile review.
+    columns:
+      - name: result_id
+        data_tests:
+          - not_null
+      - name: event_context_flag
+        description: A nominal hard split aligns with event-leg context.
+      - name: record_integrity_flag
+        description: Timing fields do not reconcile cleanly or contain structural issues.
+      - name: individual_profile_flag
+        description: A row has unusual individual split/profile evidence not explained only by course context.
+      - name: model_residual_flag
+        description: Placeholder for future model residual review signals.
