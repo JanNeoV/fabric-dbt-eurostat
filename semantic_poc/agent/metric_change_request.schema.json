@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/semantic-poc/metric-change-request.schema.json",
+  "title": "MetricChangeRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "change_id",
+    "created_at",
+    "user_request",
+    "intent",
+    "mode",
+    "canonical_metric_name",
+    "canonical_file",
+    "requested_semantic_change",
+    "affected_targets",
+    "target_support",
+    "status",
+    "approval_state",
+    "validation_state",
+    "deployment_state",
+    "assumptions",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "change_id": {
+      "type": "string",
+      "pattern": "^chg_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{8}$"
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "user_request": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "enum": [
+        "CREATE_METRIC",
+        "UPDATE_METRIC",
+        "RENAME_METRIC",
+        "DEPRECATE_METRIC",
+        "RECONCILE_TARGET_DRIFT"
+      ]
+    },
+    "mode": {
+      "enum": ["PROPOSE", "APPLY_LOCAL", "VALIDATE"]
+    },
+    "canonical_metric_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_file": {
+      "const": "models/semantic/triathlon_semantic.yml"
+    },
+    "requested_semantic_change": {
+      "type": "string",
+      "minLength": 1
+    },
+    "affected_targets": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["CANONICAL_DBT", "POWER_BI", "SNOWFLAKE"]
+      }
+    },
+    "target_support": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "enum": ["CANONICAL_DBT", "POWER_BI", "SNOWFLAKE"]
+      },
+      "additionalProperties": {
+        "enum": [
+          "SUPPORTED_PATTERN",
+          "METADATA_ONLY",
+          "MANUAL_REVIEW_REQUIRED",
+          "UNSUPPORTED"
+        ]
+      }
+    },
+    "status": {
+      "enum": ["DRAFT", "PROPOSED", "APPROVED", "APPLIED_LOCAL", "VALIDATED", "REJECTED", "FAILED"]
+    },
+    "approval_state": {
+      "enum": ["NOT_REQUESTED", "REQUIRED", "APPROVED", "REJECTED"]
+    },
+    "validation_state": {
+      "enum": ["NOT_RUN", "PASSED", "FAILED"]
+    },
+    "deployment_state": {
+      "enum": ["NOT_REQUESTED", "NOT_PERFORMED", "BLOCKED"]
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

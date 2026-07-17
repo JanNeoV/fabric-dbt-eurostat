@@ -50,3 +50,7 @@ seeds/coachcox_seed_manifest.csv
 semantic_poc/output/patched_powerbi_definition/
 semantic_poc/output/snowflake_verification.json
 semantic_poc/output/snowflake_verification.md
+
+# Local semantic-agent change requests
+semantic_poc/changes/*
+!semantic_poc/changes/.gitkeep

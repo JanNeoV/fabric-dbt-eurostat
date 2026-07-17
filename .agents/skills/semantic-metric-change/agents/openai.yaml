@@ -1,0 +1,4 @@
+interface:
+  display_name: "Semantic Metric Change"
+  short_description: "Inspect and safely propose semantic metric changes"
+  default_prompt: "Use $semantic-metric-change to inspect a mapped business metric and prepare a safe canonical proposal."
