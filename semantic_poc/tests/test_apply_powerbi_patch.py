@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import codecs
 import json
+import shutil
 from pathlib import Path
 
-from semantic_poc.src.apply_powerbi_patch import apply_powerbi_patch, partition_blocks
+import pytest
+
+from semantic_poc.src.apply_powerbi_patch import (
+    apply_powerbi_patch,
+    definition_files,
+    parse_args,
+    partition_blocks,
+)
 from semantic_poc.src.models import parse_tmdl_definition
 
 
@@ -104,6 +113,98 @@ def test_description_application(tmp_path: Path) -> None:
     assert result.success
     text = (tmp_path / "patched" / "tables" / "tri_measures.tmdl").read_text()
     assert "\t/// Share of valid SBR finishers affected by event context." in text
+
+
+def test_table_column_descriptions_and_column_hidden_application(tmp_path: Path) -> None:
+    definition = write_definition(tmp_path, BASE_TABLE.replace("\t\tdataType: string\n", "\t\tdataType: string\n").replace("\t\tisHidden\n", ""))
+    operations = [
+        {
+            "operation": "set_table_description",
+            "table": "tri_measures",
+            "current": "",
+            "proposed": "Canonical measure table.",
+        },
+        {
+            "operation": "set_column_description",
+            "table": "tri_measures",
+            "column": "dummy",
+            "current": "",
+            "proposed": "Technical placeholder column.",
+        },
+        {
+            "operation": "set_column_hidden",
+            "table": "tri_measures",
+            "column": "dummy",
+            "current": False,
+            "proposed": True,
+        },
+    ]
+
+    result = apply_single(tmp_path, definition, operations)
+
+    assert result.success
+    text = (tmp_path / "patched" / "tables" / "tri_measures.tmdl").read_text()
+    assert text.startswith("/// Canonical measure table.\ntable tri_measures")
+    assert "\t/// Technical placeholder column.\n\tcolumn dummy" in text
+    assert "\t\tdataType: string\n\t\tisHidden\n" in text
+
+
+def test_complete_definition_copy_and_source_tree_preservation(tmp_path: Path) -> None:
+    definition = write_definition(tmp_path)
+    cultures = definition / "cultures"
+    cultures.mkdir()
+    (cultures / "en-US.tmdl").write_text("cultureInfo en-US\n", encoding="utf-8")
+    (definition / "model.tmdl").write_text("model Model\n", encoding="utf-8")
+    before = definition_files(definition)
+
+    result = apply_single(tmp_path, definition, [measure_operation("set_measure_format", "0.0%")])
+
+    assert result.success
+    assert definition_files(definition) == before
+    assert (tmp_path / "patched" / "cultures" / "en-US.tmdl").read_bytes() == before["cultures/en-US.tmdl"]
+    assert set(definition_files(tmp_path / "patched")) == set(before)
+
+
+def test_unsupported_operation_is_rejected_transactionally(tmp_path: Path) -> None:
+    definition = write_definition(tmp_path)
+    operation = {
+        "operation": "set_measure_dax",
+        "table": "tri_measures",
+        "measure": "Event Context Rate",
+        "current": "old",
+        "proposed": "new",
+    }
+
+    result = apply_single(tmp_path, definition, [operation])
+
+    assert not result.success
+    assert not (tmp_path / "patched").exists()
+    assert "outside the safe metadata patch scope" in result.report_path.read_text()
+
+
+def test_duplicate_patch_operation_is_rejected(tmp_path: Path) -> None:
+    definition = write_definition(tmp_path)
+    operation = measure_operation("set_measure_format", "0.0%")
+
+    result = apply_single(tmp_path, definition, [operation, operation])
+
+    assert not result.success
+    assert "duplicate patch target" in result.report_path.read_text()
+
+
+def test_unsafe_property_insertion_is_skipped(tmp_path: Path) -> None:
+    unsafe_table = BASE_TABLE.replace(
+        "\t\tlineageTag: measure-tag\n\n\t\tannotation PBI_FormatHint = {\"isGeneralNumber\":true}",
+        "",
+    )
+    definition = write_definition(tmp_path, unsafe_table)
+
+    result = apply_single(tmp_path, definition, [measure_operation("set_measure_format", "0.0%")])
+
+    assert result.success
+    assert not result.applied
+    assert any(item["reason"] == "target block could not be modified safely" for item in result.skipped)
+    assert "formatString: 0.0%" not in (tmp_path / "patched" / "tables" / "tri_measures.tmdl").read_text()
 
 
 def test_unknown_measure_rejection(tmp_path: Path) -> None:
@@ -213,6 +314,80 @@ def test_output_folder_only_behaviour(tmp_path: Path) -> None:
     assert (tmp_path / "patched" / "tables" / "tri_measures.tmdl").is_file()
 
 
+@pytest.mark.parametrize("output_kind", ["same", "child", "parent", "existing"])
+def test_output_path_overlap_and_existing_directory_rejection(tmp_path: Path, output_kind: str) -> None:
+    definition = write_definition(tmp_path)
+    patch = write_patch(tmp_path, [measure_operation("set_measure_format", "0.0%")])
+    if output_kind == "same":
+        output = definition
+    elif output_kind == "child":
+        output = definition / "patched"
+    elif output_kind == "parent":
+        output = tmp_path
+    else:
+        output = tmp_path / "existing"
+        output.mkdir()
+
+    result = apply_powerbi_patch(definition_dir=definition, patch_path=patch, output_dir=output)
+
+    assert not result.success
+    assert definition.is_dir()
+    assert any("output" in failure.lower() for failure in result.failures)
+
+
+def test_cli_has_no_in_place_mode() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(
+            [
+                "--definition-dir",
+                "definition",
+                "--patch",
+                "patch.json",
+                "--output-dir",
+                "patched",
+                "--in-place",
+            ]
+        )
+
+
+def test_bom_crlf_annotations_and_unrelated_whitespace_are_preserved(tmp_path: Path) -> None:
+    definition = write_definition(tmp_path)
+    table_path = definition / "tables" / "tri_measures.tmdl"
+    crlf_text = BASE_TABLE.replace("\n", "\r\n")
+    table_path.write_bytes(codecs.BOM_UTF8 + crlf_text.encode("utf-8"))
+
+    result = apply_single(tmp_path, definition, [measure_operation("set_measure_format", "0.0%")])
+
+    assert result.success
+    patched = (tmp_path / "patched" / "tables" / "tri_measures.tmdl").read_bytes()
+    assert patched.startswith(codecs.BOM_UTF8)
+    decoded = patched[len(codecs.BOM_UTF8) :].decode("utf-8")
+    assert "\n" not in decoded.replace("\r\n", "")
+    assert '\t\tannotation PBI_FormatHint = {"isGeneralNumber":true}\r\n' in decoded
+    assert "\t\t\t\tlet\r\n" in decoded
+
+
+def test_names_counts_source_mappings_and_artifacts_are_preserved(tmp_path: Path) -> None:
+    definition = write_definition(tmp_path)
+    source = parse_tmdl_definition(definition, definition)
+
+    result = apply_single(tmp_path, definition, [measure_operation("set_measure_display_folder", "03 Rates")])
+    patched = parse_tmdl_definition(tmp_path / "patched", tmp_path / "patched")
+
+    assert result.success
+    assert source["tables"].keys() == patched["tables"].keys()
+    assert source["tables"]["tri_measures"]["columns"].keys() == patched["tables"]["tri_measures"]["columns"].keys()
+    assert source["tables"]["tri_measures"]["measures"].keys() == patched["tables"]["tri_measures"]["measures"].keys()
+    assert (
+        source["tables"]["tri_measures"]["columns"]["dummy"]["source_column"]
+        == patched["tables"]["tri_measures"]["columns"]["dummy"]["source_column"]
+    )
+    assert result.semantics_path.is_file()
+    assert result.compatibility_path.is_file()
+    assert "Compatibility before:" in result.report_path.read_text()
+    assert "Compatibility after:" in result.report_path.read_text()
+
+
 def test_idempotency(tmp_path: Path) -> None:
     definition = write_definition(tmp_path)
     patch = write_patch(tmp_path, [measure_operation("set_measure_format", "0.0%")])
@@ -228,3 +403,27 @@ def test_idempotency(tmp_path: Path) -> None:
         second_output / "tables" / "tri_measures.tmdl"
     ).read_bytes()
     assert any(item["reason"] == "already set" for item in second.skipped)
+
+
+def test_repository_patch_reduces_metadata_drift_and_preserves_structural_drift(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    for filename in [
+        "proposed_powerbi_patch.json",
+        "dbt_semantics.json",
+        "snowflake_semantic_view.yml",
+    ]:
+        shutil.copy2(repo_root / "semantic_poc" / "output" / filename, artifact_dir / filename)
+
+    result = apply_powerbi_patch(
+        definition_dir=repo_root / "pbi" / "triathlon_pbi_model.SemanticModel" / "definition",
+        patch_path=artifact_dir / "proposed_powerbi_patch.json",
+        output_dir=tmp_path / "patched",
+    )
+
+    assert result.success
+    assert result.compatibility_before == {"metadata_drift": 5, "structural_drift": 1}
+    assert result.compatibility_after == {"metadata_drift": 0, "structural_drift": 1}
+    assert len(result.applied) == 10
+    assert "METADATA_DRIFT" not in result.compatibility_path.read_text()

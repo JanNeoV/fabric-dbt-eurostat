@@ -41,7 +41,9 @@ python -m semantic_poc.src.deploy_snowflake_semantic_view --apply
 
 Snowflake credentials must come from environment variables or a Snowflake connector profile. Keep `config/snowflake_environment.yml` limited to non-secret target values.
 
-Apply the safe Power BI metadata patch to a copied definition folder:
+## Applying a Power BI metadata patch
+
+The command creates a complete copied definition folder and never edits the source in place:
 
 ```bash
 python -m semantic_poc.src.apply_powerbi_patch \
@@ -58,6 +60,8 @@ git diff --no-index \
   semantic_poc/output/patched_powerbi_definition
 ```
 
-Generated example outputs live in `semantic_poc/output/` and are intentionally committed. The patch command writes `powerbi_patch_result.md` and changes only a copied definition folder by default. Snowflake verification writes `snowflake_verification.json` and `snowflake_verification.md` when the optional command runs; deployment requires `--apply`.
+Copy the PBIP project before using the patched definition. Close Power BI Desktop, replace the copied project's `SemanticModel/definition` folder, and then reopen Desktop to validate the model. Structural relationship drift remains a manual decision and is never applied by this command.
+
+Generated example outputs live in `semantic_poc/output/` and are intentionally committed. The patch command writes `powerbi_patch_result.md`, `patched_powerbi_semantics.json`, and `patched_semantic_compatibility.md`; only the copied definition folder is edited. Snowflake verification writes `snowflake_verification.json` and `snowflake_verification.md` when the optional command runs; deployment requires `--apply`.
 
 Live Snowflake verification reports are local artifacts by default. Commit them only after intentional review and redaction, because real account responses can include environment-specific object names or error details.

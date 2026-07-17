@@ -6,18 +6,30 @@ import re
 import shutil
 import sys
 import textwrap
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
 from .models import (
+    CANONICAL_SOURCE,
+    DBT_OUTPUT,
+    SNOWFLAKE_ENVIRONMENT,
+    SNOWFLAKE_OUTPUT,
+    STATUS_METADATA_DRIFT,
+    build_snowflake_semantic_view,
     clean_tmdl_identifier,
     clean_tmdl_value,
+    compare_semantics,
     load_json,
+    load_normalized_dbt_semantics,
+    load_yaml,
     normalize_expression,
     normalize_text,
     parse_tmdl_definition,
     relative_posix,
+    render_compatibility_markdown,
+    write_json,
 )
 
 
@@ -35,14 +47,24 @@ MEASURE_PROPERTY_OPERATIONS = {
     "set_measure_display_folder": ("displayFolder", "displayFolder"),
 }
 
-PROTECTED_CHECKS = [
-    "DAX expressions unchanged",
-    "lineage tags unchanged",
-    "relationships unchanged",
-    "partitions unchanged",
-    "table and column counts unchanged",
-    "measure counts unchanged",
-]
+PATCHED_POWERBI_OUTPUT = "patched_powerbi_semantics.json"
+PATCHED_COMPATIBILITY_OUTPUT = "patched_semantic_compatibility.md"
+
+FORBIDDEN_OPERATION_FIELDS = {
+    "dax",
+    "expression",
+    "lineage",
+    "lineage_tag",
+    "lineagetag",
+    "relationship",
+    "relationships",
+    "partition",
+    "partitions",
+    "power_query",
+    "powerquery",
+    "role",
+    "rls",
+}
 
 
 @dataclass(frozen=True)
@@ -131,14 +153,22 @@ class DefinitionDocuments:
         for path in sorted((definition_dir / "tables").glob("*.tmdl")):
             document = TmdlDocument.load(path)
             table_blocks = document.blocks()["table"]
-            table_name = next(iter(table_blocks.keys()), path.stem)
-            tables.setdefault(table_name, []).append(document)
+            if not table_blocks:
+                tables.setdefault(path.stem, []).append(document)
+            for table_name, matches in table_blocks.items():
+                tables.setdefault(table_name, []).extend(document for _match in matches)
         return cls(definition_dir=definition_dir, tables=tables)
 
     def table_document(self, table_name: str) -> tuple[TmdlDocument | None, str | None]:
         matches = self.tables.get(table_name, [])
         if len(matches) == 1:
-            return matches[0], None
+            document = matches[0]
+            table_matches = document.blocks()["table"].get(table_name, [])
+            if len(table_matches) == 1:
+                return document, None
+            if not table_matches:
+                return None, f"table `{table_name}` does not exist exactly once"
+            return None, f"table `{table_name}` is ambiguous ({len(table_matches)} matches)"
         if not matches:
             return None, f"table `{table_name}` does not exist exactly once"
         return None, f"table `{table_name}` is ambiguous ({len(matches)} matches)"
@@ -160,10 +190,14 @@ class PatchApplyResult:
     success: bool
     output_dir: Path
     report_path: Path
+    semantics_path: Path
+    compatibility_path: Path
     applied: list[str] = field(default_factory=list)
     skipped: list[dict[str, str]] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
-    protected_checks: list[str] = field(default_factory=lambda: PROTECTED_CHECKS.copy())
+    protected_checks: list[str] = field(default_factory=list)
+    compatibility_before: dict[str, int] | None = None
+    compatibility_after: dict[str, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +205,7 @@ class ProtectedSnapshot:
     semantics: dict[str, Any]
     relationships: bytes
     partitions: dict[tuple[str, str], str]
+    source_files: dict[str, bytes]
 
 
 def parse_header(line: str) -> tuple[str, str] | None:
@@ -218,13 +253,20 @@ def set_description(document: TmdlDocument, block: TmdlBlock, description: str) 
     return True
 
 
-def measure_property(document: TmdlDocument, block: TmdlBlock, property_name: str) -> str | None:
+def measure_property(
+    document: TmdlDocument,
+    block: TmdlBlock,
+    property_name: str,
+) -> tuple[str | None, str | None]:
     prefix = f"{property_name}:"
+    values: list[str] = []
     for line in document.lines[block.header + 1 : block.end]:
         stripped = line.strip()
         if stripped.startswith(prefix):
-            return clean_tmdl_value(stripped.split(":", 1)[1])
-    return None
+            values.append(clean_tmdl_value(stripped.split(":", 1)[1]))
+    if len(values) > 1:
+        return None, f"property `{property_name}` is ambiguous ({len(values)} matches)"
+    return (values[0] if values else None), None
 
 
 def set_measure_property(document: TmdlDocument, block: TmdlBlock, property_name: str, value: str) -> bool:
@@ -253,8 +295,13 @@ def set_measure_property(document: TmdlDocument, block: TmdlBlock, property_name
     return True
 
 
-def column_hidden(document: TmdlDocument, block: TmdlBlock) -> bool:
-    return any(line.strip() == "isHidden" for line in document.lines[block.header + 1 : block.end])
+def column_hidden(document: TmdlDocument, block: TmdlBlock) -> tuple[bool, str | None]:
+    matches = sum(
+        1 for line in document.lines[block.header + 1 : block.end] if line.strip() == "isHidden"
+    )
+    if matches > 1:
+        return False, f"property `isHidden` is ambiguous ({matches} matches)"
+    return matches == 1, None
 
 
 def set_column_hidden(document: TmdlDocument, block: TmdlBlock, value: bool) -> bool:
@@ -287,17 +334,17 @@ def operation_label(operation: dict[str, Any]) -> str:
     operation_name = operation.get("operation")
     proposed = operation.get("proposed")
     if operation_name == "set_measure_format":
-        return f"{operation.get('measure')}: formatString -> {proposed}"
+        return f"{operation.get('measure')}: formatString set to {proposed}"
     if operation_name == "set_measure_display_folder":
-        return f"{operation.get('measure')}: displayFolder -> {proposed}"
+        return f"{operation.get('measure')}: displayFolder set to {proposed}"
     if operation_name == "set_measure_description":
-        return f"{operation.get('measure')}: description -> {proposed}"
+        return f"{operation.get('measure')}: description set to {proposed}"
     if operation_name == "set_table_description":
-        return f"{operation.get('table')}: description -> {proposed}"
+        return f"{operation.get('table')}: description set to {proposed}"
     if operation_name == "set_column_description":
-        return f"{operation.get('table')}.{operation.get('column')}: description -> {proposed}"
+        return f"{operation.get('table')}.{operation.get('column')}: description set to {proposed}"
     if operation_name == "set_column_hidden":
-        return f"{operation.get('table')}.{operation.get('column')}: isHidden -> {proposed}"
+        return f"{operation.get('table')}.{operation.get('column')}: isHidden set to {proposed}"
     return str(operation_name or "unknown operation")
 
 
@@ -315,6 +362,57 @@ def already_applied(operation_name: str, actual: Any, proposed: Any) -> bool:
     if operation_name in {"set_measure_description", "set_table_description", "set_column_description"}:
         return normalize_text(str(actual or "")) == normalize_text(str(proposed or ""))
     return actual == proposed
+
+
+def operation_target_key(operation: dict[str, Any]) -> tuple[str, ...]:
+    operation_name = str(operation.get("operation"))
+    table_name = str(operation.get("table"))
+    if operation_name.startswith("set_measure_"):
+        return operation_name, table_name, str(operation.get("measure"))
+    if operation_name.startswith("set_column_"):
+        return operation_name, table_name, str(operation.get("column"))
+    return operation_name, table_name
+
+
+def validate_operation_shape(operation: Any, index: int) -> list[str]:
+    prefix = f"operation {index + 1}"
+    if not isinstance(operation, dict):
+        return [f"{prefix}: patch operation must be an object"]
+
+    failures: list[str] = []
+    operation_name = operation.get("operation")
+    if not isinstance(operation_name, str) or not operation_name:
+        failures.append(f"{prefix}: operation is missing a string `operation`")
+        return failures
+    if operation_name not in ALLOWED_OPERATIONS:
+        failures.append(f"{prefix}: operation `{operation_name}` is outside the safe metadata patch scope")
+
+    forbidden = sorted(
+        str(key)
+        for key in operation
+        if str(key).lower().replace("-", "_") in FORBIDDEN_OPERATION_FIELDS
+    )
+    if forbidden:
+        failures.append(f"{prefix}: forbidden patch fields: {', '.join(forbidden)}")
+
+    if not isinstance(operation.get("table"), str) or not operation.get("table"):
+        failures.append(f"{prefix}: operation is missing a string `table`")
+    if operation_name.startswith("set_measure_") and (
+        not isinstance(operation.get("measure"), str) or not operation.get("measure")
+    ):
+        failures.append(f"{prefix}: measure operation is missing a string `measure`")
+    if operation_name.startswith("set_column_") and (
+        not isinstance(operation.get("column"), str) or not operation.get("column")
+    ):
+        failures.append(f"{prefix}: column operation is missing a string `column`")
+    if "proposed" not in operation:
+        failures.append(f"{prefix}: operation is missing `proposed`")
+    elif operation_name == "set_column_hidden":
+        if not isinstance(operation.get("proposed"), bool):
+            failures.append(f"{prefix}: `set_column_hidden` requires a boolean `proposed` value")
+    elif operation_name in ALLOWED_OPERATIONS and not isinstance(operation.get("proposed"), str):
+        failures.append(f"{prefix}: `{operation_name}` requires a string `proposed` value")
+    return failures
 
 
 def resolve_operation_target(
@@ -345,7 +443,8 @@ def resolve_operation_target(
         if operation_name == "set_measure_description":
             return document, block, read_description(document, block), None
         property_name, _ = MEASURE_PROPERTY_OPERATIONS[str(operation_name)]
-        return document, block, measure_property(document, block, property_name), None
+        actual, property_error = measure_property(document, block, property_name)
+        return document, block, actual, property_error
 
     if operation_name in {"set_column_description", "set_column_hidden"}:
         column_name = operation.get("column")
@@ -356,31 +455,53 @@ def resolve_operation_target(
             return document, None, None, error
         if operation_name == "set_column_description":
             return document, block, read_description(document, block), None
-        return document, block, column_hidden(document, block), None
+        actual, property_error = column_hidden(document, block)
+        return document, block, actual, property_error
 
     return document, None, None, f"operation `{operation_name}` is outside the safe patch scope"
 
 
 def validate_operations(
     documents: DefinitionDocuments,
-    patch: dict[str, Any],
+    patch: Any,
     result: PatchApplyResult,
 ) -> list[PreparedOperation]:
     prepared: list[PreparedOperation] = []
-    for skipped in patch.get("skipped", []):
+    if not isinstance(patch, dict):
+        result.failures.append("patch document must be a JSON object")
+        return prepared
+
+    operations = patch.get("operations")
+    skipped_items = patch.get("skipped", [])
+    if not isinstance(operations, list):
+        result.failures.append("patch document must contain an `operations` list")
+        return prepared
+    if not isinstance(skipped_items, list):
+        result.failures.append("patch document `skipped` value must be a list")
+        return prepared
+
+    for skipped in skipped_items:
+        if not isinstance(skipped, dict):
+            result.failures.append("each `skipped` patch item must be an object")
+            continue
         item = str(skipped.get("item") or "skipped patch item")
         reason = str(skipped.get("reason") or "outside the safe patch scope")
         result.skipped.append(skipped_operation(item, reason))
 
-    for operation in patch.get("operations", []):
+    seen_targets: set[tuple[str, ...]] = set()
+    for index, operation in enumerate(operations):
+        shape_failures = validate_operation_shape(operation, index)
+        result.failures.extend(shape_failures)
+        if shape_failures or not isinstance(operation, dict):
+            continue
+
         operation_name = operation.get("operation")
         label = operation_label(operation)
-        if operation_name not in ALLOWED_OPERATIONS:
-            reason = "structural changes are outside the safe patch scope"
-            if "relationship" not in str(operation_name or "").lower():
-                reason = "operation is outside the safe metadata patch scope"
-            result.skipped.append(skipped_operation(label, reason))
+        target_key = operation_target_key(operation)
+        if target_key in seen_targets:
+            result.failures.append(f"{label}: duplicate patch target")
             continue
+        seen_targets.add(target_key)
 
         _document, _block, actual, error = resolve_operation_target(documents, operation)
         if error:
@@ -454,6 +575,14 @@ def partition_blocks(definition_dir: Path) -> dict[tuple[str, str], str]:
     return blocks
 
 
+def definition_files(definition_dir: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(definition_dir).as_posix(): path.read_bytes()
+        for path in sorted(definition_dir.rglob("*"))
+        if path.is_file()
+    }
+
+
 def lineage_snapshot(semantics: dict[str, Any]) -> dict[tuple[str, ...], Any]:
     snapshot: dict[tuple[str, ...], Any] = {}
     for table_name, table in semantics.get("tables", {}).items():
@@ -482,39 +611,170 @@ def count_snapshot(semantics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def source_column_snapshot(semantics: dict[str, Any]) -> dict[tuple[str, str], Any]:
+    return {
+        (table_name, column_name): column.get("source_column")
+        for table_name, table in semantics.get("tables", {}).items()
+        for column_name, column in table.get("columns", {}).items()
+    }
+
+
+def column_type_snapshot(semantics: dict[str, Any]) -> dict[tuple[str, str], tuple[Any, Any]]:
+    return {
+        (table_name, column_name): (column.get("data_type"), column.get("format_string"))
+        for table_name, table in semantics.get("tables", {}).items()
+        for column_name, column in table.get("columns", {}).items()
+    }
+
+
+def metadata_snapshot(semantics: dict[str, Any]) -> dict[tuple[str, ...], Any]:
+    snapshot: dict[tuple[str, ...], Any] = {}
+    for table_name, table in semantics.get("tables", {}).items():
+        snapshot[("table_description", table_name)] = normalize_text(table.get("description"))
+        for measure_name, measure in table.get("measures", {}).items():
+            snapshot[("measure_description", table_name, measure_name)] = normalize_text(
+                measure.get("description")
+            )
+            snapshot[("measure_format", table_name, measure_name)] = measure.get("format_string")
+            snapshot[("measure_display_folder", table_name, measure_name)] = measure.get(
+                "display_folder"
+            )
+        for column_name, column in table.get("columns", {}).items():
+            snapshot[("column_description", table_name, column_name)] = normalize_text(
+                column.get("description")
+            )
+            snapshot[("column_hidden", table_name, column_name)] = column.get("is_hidden")
+    return snapshot
+
+
+def allowed_metadata_keys(prepared: list[PreparedOperation]) -> set[tuple[str, ...]]:
+    keys: set[tuple[str, ...]] = set()
+    prefixes = {
+        "set_table_description": "table_description",
+        "set_measure_description": "measure_description",
+        "set_measure_format": "measure_format",
+        "set_measure_display_folder": "measure_display_folder",
+        "set_column_description": "column_description",
+        "set_column_hidden": "column_hidden",
+    }
+    for item in prepared:
+        operation = item.operation
+        operation_name = str(operation["operation"])
+        prefix = prefixes[operation_name]
+        if operation_name == "set_table_description":
+            keys.add((prefix, str(operation["table"])))
+        elif operation_name.startswith("set_measure_"):
+            keys.add((prefix, str(operation["table"]), str(operation["measure"])))
+        else:
+            keys.add((prefix, str(operation["table"]), str(operation["column"])))
+    return keys
+
+
 def capture_protected_snapshot(definition_dir: Path) -> ProtectedSnapshot:
     return ProtectedSnapshot(
-        semantics=parse_tmdl_definition(definition_dir, definition_dir),
+        semantics=parse_tmdl_definition(definition_dir),
         relationships=relationship_bytes(definition_dir),
         partitions=partition_blocks(definition_dir),
+        source_files=definition_files(definition_dir),
     )
 
 
-def validate_protected_properties(source: ProtectedSnapshot, target_dir: Path, result: PatchApplyResult) -> None:
-    target = parse_tmdl_definition(target_dir, target_dir)
+def record_check(result: PatchApplyResult, label: str, passed: bool, failure: str) -> None:
+    if passed:
+        result.protected_checks.append(label)
+    else:
+        result.failures.append(f"protected check failed: {failure}")
+
+
+def validate_protected_properties(
+    source: ProtectedSnapshot,
+    source_dir: Path,
+    target_dir: Path,
+    prepared: list[PreparedOperation],
+    result: PatchApplyResult,
+) -> dict[str, Any]:
+    target = parse_tmdl_definition(target_dir)
 
     source_counts = count_snapshot(source.semantics)
     target_counts = count_snapshot(target)
-    if source_counts["tables"] != target_counts["tables"] or source_counts["columns"] != target_counts["columns"]:
-        result.failures.append("protected check failed: table and column counts changed")
-    if source_counts["measures"] != target_counts["measures"]:
-        result.failures.append("protected check failed: measure counts changed")
+    names_and_counts_match = source_counts == target_counts
+    record_check(
+        result,
+        "table, column, and measure names and counts unchanged",
+        names_and_counts_match,
+        "table, column, or measure names/counts changed",
+    )
+    record_check(
+        result,
+        "DAX expressions unchanged",
+        measure_expression_snapshot(source.semantics) == measure_expression_snapshot(target),
+        "DAX expressions changed",
+    )
+    record_check(
+        result,
+        "lineage tags unchanged",
+        lineage_snapshot(source.semantics) == lineage_snapshot(target),
+        "lineage tags changed",
+    )
+    record_check(
+        result,
+        "relationships unchanged",
+        source.relationships == relationship_bytes(target_dir),
+        "relationship definitions changed",
+    )
+    record_check(
+        result,
+        "partitions and Power Query expressions unchanged",
+        source.partitions == partition_blocks(target_dir),
+        "partition or Power Query definitions changed",
+    )
+    record_check(
+        result,
+        "source-column mappings unchanged",
+        source_column_snapshot(source.semantics) == source_column_snapshot(target),
+        "source-column mappings changed",
+    )
+    record_check(
+        result,
+        "column data types and formats unchanged",
+        column_type_snapshot(source.semantics) == column_type_snapshot(target),
+        "column data types or formats changed",
+    )
 
-    if measure_expression_snapshot(source.semantics) != measure_expression_snapshot(target):
-        result.failures.append("protected check failed: DAX expressions changed")
+    source_metadata = metadata_snapshot(source.semantics)
+    target_metadata = metadata_snapshot(target)
+    changed_metadata = {
+        key
+        for key in source_metadata.keys() | target_metadata.keys()
+        if source_metadata.get(key) != target_metadata.get(key)
+    }
+    unexpected_metadata = changed_metadata - allowed_metadata_keys(prepared)
+    record_check(
+        result,
+        "only approved metadata fields changed",
+        not unexpected_metadata,
+        "unapproved metadata fields changed: "
+        + ", ".join(".".join(key) for key in sorted(unexpected_metadata)),
+    )
 
-    if lineage_snapshot(source.semantics) != lineage_snapshot(target):
-        result.failures.append("protected check failed: lineage tags changed")
-
-    if source.relationships != relationship_bytes(target_dir):
-        result.failures.append("protected check failed: relationship definitions changed")
-
-    if source.partitions != partition_blocks(target_dir):
-        result.failures.append("protected check failed: partition definitions changed")
+    target_files = definition_files(target_dir)
+    record_check(
+        result,
+        "complete definition file set preserved",
+        set(source.source_files) == set(target_files),
+        "copied definition file set changed",
+    )
+    record_check(
+        result,
+        "source definition folder unchanged",
+        source.source_files == definition_files(source_dir),
+        "source definition folder changed",
+    )
+    return target
 
 
 def render_report(result: PatchApplyResult) -> str:
-    lines = ["# Power BI Patch Result", ""]
+    lines = ["# Power BI metadata patch result", ""]
     lines.extend(["Applied:"])
     if result.applied:
         lines.extend(f"- {item}" for item in result.applied)
@@ -533,11 +793,35 @@ def render_report(result: PatchApplyResult) -> str:
         lines.extend(["", "Failed:"])
         lines.extend(f"- {failure}" for failure in result.failures)
 
-    lines.extend(["", "Protected properties:"])
-    for check in result.protected_checks:
-        lines.append(f"- {check}")
+    lines.extend(["", "Preservation checks:"])
+    if result.protected_checks:
+        for check in result.protected_checks:
+            lines.append(f"- {check}")
+    else:
+        lines.append("- Not run.")
+
+    if result.compatibility_before is not None:
+        lines.extend(
+            [
+                "",
+                "Compatibility before:",
+                f"- metadata drift: {result.compatibility_before['metadata_drift']}",
+                f"- structural drift: {result.compatibility_before['structural_drift']}",
+            ]
+        )
+    if result.compatibility_after is not None:
+        lines.extend(
+            [
+                "",
+                "Compatibility after:",
+                f"- metadata drift: {result.compatibility_after['metadata_drift']}",
+                f"- structural drift: {result.compatibility_after['structural_drift']}",
+            ]
+        )
     lines.append("")
     lines.append(f"Output: `{relative_posix(result.output_dir)}`")
+    lines.append(f"Patched extraction: `{relative_posix(result.semantics_path)}`")
+    lines.append(f"Patched compatibility: `{relative_posix(result.compatibility_path)}`")
     lines.append(f"Status: {'success' if result.success else 'failed'}")
     lines.append("")
     return "\n".join(lines)
@@ -548,16 +832,82 @@ def write_report(result: PatchApplyResult) -> None:
     result.report_path.write_text(render_report(result), encoding="utf-8", newline="\n")
 
 
-def prepare_output_dir(definition_dir: Path, output_dir: Path, *, in_place: bool, confirm_in_place: bool) -> tuple[Path, str | None]:
-    if in_place and not confirm_in_place:
-        return definition_dir, "--in-place requires --confirm-in-place"
-    if in_place:
-        return definition_dir, None
-    if output_dir.resolve() == definition_dir.resolve():
-        return output_dir, "--output-dir must differ from --definition-dir unless confirmed in-place mode is used"
+def paths_overlap(first: Path, second: Path) -> bool:
+    first = first.resolve()
+    second = second.resolve()
+    return first == second or first in second.parents or second in first.parents
+
+
+def path_is_within(path: Path, parent: Path) -> bool:
+    path = path.resolve()
+    parent = parent.resolve()
+    return path == parent or parent in path.parents
+
+
+def prepare_output_dir(definition_dir: Path, output_dir: Path) -> tuple[Path, str | None]:
+    if paths_overlap(definition_dir, output_dir):
+        return output_dir, "--output-dir must not equal, contain, or be contained by --definition-dir"
     if output_dir.exists():
         return output_dir, f"output directory already exists: {output_dir}"
     return output_dir, None
+
+
+def load_compatibility_inputs(
+    patch_path: Path,
+    dbt_semantics: dict[str, Any] | None,
+    snowflake_view: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    artifact_dir = patch_path.parent
+    if dbt_semantics is None:
+        dbt_candidate = artifact_dir / DBT_OUTPUT.name
+        if dbt_candidate.is_file():
+            dbt_semantics = load_json(dbt_candidate)
+        elif DBT_OUTPUT.is_file():
+            dbt_semantics = load_json(DBT_OUTPUT)
+        else:
+            dbt_semantics = load_normalized_dbt_semantics()
+    if snowflake_view is None:
+        snowflake_candidate = artifact_dir / SNOWFLAKE_OUTPUT.name
+        if snowflake_candidate.is_file():
+            snowflake_view = load_yaml(snowflake_candidate)
+        elif SNOWFLAKE_OUTPUT.is_file():
+            snowflake_view = load_yaml(SNOWFLAKE_OUTPUT)
+        else:
+            snowflake_view = build_snowflake_semantic_view(
+                dbt_semantics,
+                load_yaml(SNOWFLAKE_ENVIRONMENT),
+            )
+    return dbt_semantics, snowflake_view
+
+
+def compatibility_counts(comparison: dict[str, Any]) -> dict[str, int]:
+    statuses = Counter(row.get("status") for row in comparison.get("rows", []))
+    return {
+        "metadata_drift": statuses[STATUS_METADATA_DRIFT],
+        "structural_drift": len(comparison.get("findings", {}).get("relationship_drift", [])),
+    }
+
+
+def write_patched_artifacts(
+    result: PatchApplyResult,
+    patched_semantics: dict[str, Any],
+    comparison: dict[str, Any],
+    dbt_semantics: dict[str, Any],
+) -> None:
+    canonical_source = dbt_semantics.get("canonical_source", CANONICAL_SOURCE)
+    compiled_source = dbt_semantics.get("compiled_source", "target/semantic_manifest.json")
+    write_json(
+        result.semantics_path,
+        patched_semantics,
+        generated=True,
+        canonical_source=canonical_source,
+    )
+    result.compatibility_path.parent.mkdir(parents=True, exist_ok=True)
+    result.compatibility_path.write_text(
+        render_compatibility_markdown(comparison, canonical_source, compiled_source),
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def apply_powerbi_patch(
@@ -565,21 +915,25 @@ def apply_powerbi_patch(
     definition_dir: Path,
     patch_path: Path,
     output_dir: Path,
-    in_place: bool = False,
-    confirm_in_place: bool = False,
+    dbt_semantics: dict[str, Any] | None = None,
+    snowflake_view: dict[str, Any] | None = None,
 ) -> PatchApplyResult:
     definition_dir = definition_dir.resolve()
     patch_path = patch_path.resolve()
     output_dir = output_dir.resolve()
-    report_path = patch_path.parent / "powerbi_patch_result.md"
-    target_dir, output_error = prepare_output_dir(
-        definition_dir,
-        output_dir,
-        in_place=in_place,
-        confirm_in_place=confirm_in_place,
+    artifact_dir = patch_path.parent
+    target_dir, output_error = prepare_output_dir(definition_dir, output_dir)
+    result = PatchApplyResult(
+        success=False,
+        output_dir=target_dir,
+        report_path=artifact_dir / "powerbi_patch_result.md",
+        semantics_path=artifact_dir / PATCHED_POWERBI_OUTPUT,
+        compatibility_path=artifact_dir / PATCHED_COMPATIBILITY_OUTPUT,
     )
-    result = PatchApplyResult(success=False, output_dir=target_dir, report_path=report_path)
 
+    if path_is_within(artifact_dir, definition_dir):
+        result.failures.append("patch and result artifacts must be outside --definition-dir")
+        return result
     if output_error:
         result.failures.append(output_error)
         write_report(result)
@@ -593,9 +947,28 @@ def apply_powerbi_patch(
         write_report(result)
         return result
 
-    patch = load_json(patch_path)
-    source_documents = DefinitionDocuments.load(definition_dir)
-    protected_snapshot = capture_protected_snapshot(definition_dir)
+    try:
+        patch = load_json(patch_path)
+        source_documents = DefinitionDocuments.load(definition_dir)
+        if not source_documents.tables:
+            raise ValueError("definition folder contains no TMDL table definitions")
+        protected_snapshot = capture_protected_snapshot(definition_dir)
+        dbt_semantics, snowflake_view = load_compatibility_inputs(
+            patch_path,
+            dbt_semantics,
+            snowflake_view,
+        )
+        before_comparison = compare_semantics(
+            dbt_semantics,
+            protected_snapshot.semantics,
+            snowflake_view,
+        )
+        result.compatibility_before = compatibility_counts(before_comparison)
+    except Exception as exc:
+        result.failures.append(f"input validation failed: {exc}")
+        write_report(result)
+        return result
+
     prepared = validate_operations(source_documents, patch, result)
     if result.failures:
         write_report(result)
@@ -603,16 +976,29 @@ def apply_powerbi_patch(
 
     copied = False
     try:
-        if not in_place:
-            shutil.copytree(definition_dir, target_dir)
-            copied = True
+        shutil.copytree(definition_dir, target_dir)
+        copied = True
         target_documents = DefinitionDocuments.load(target_dir)
         apply_prepared_operations(target_documents, prepared, result)
         if result.failures:
             raise RuntimeError("patch application failed")
-        validate_protected_properties(protected_snapshot, target_dir, result)
+        patched_semantics = validate_protected_properties(
+            protected_snapshot,
+            definition_dir,
+            target_dir,
+            prepared,
+            result,
+        )
         if result.failures:
             raise RuntimeError("protected property validation failed")
+        after_comparison = compare_semantics(dbt_semantics, patched_semantics, snowflake_view)
+        result.compatibility_after = compatibility_counts(after_comparison)
+        write_patched_artifacts(
+            result,
+            patched_semantics,
+            after_comparison,
+            dbt_semantics,
+        )
         result.success = True
     except Exception as exc:  # pragma: no cover - defensive cleanup around file-system operations.
         if not result.failures:
@@ -628,31 +1014,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Apply a safe Power BI TMDL metadata patch to a copied definition folder.")
     parser.add_argument("--definition-dir", required=True, help="Source Power BI SemanticModel definition folder.")
     parser.add_argument("--patch", required=True, help="Patch JSON generated by the semantic POC.")
-    parser.add_argument("--output-dir", help="Copied output definition folder. Required unless --in-place is used.")
-    parser.add_argument("--in-place", action="store_true", help="Modify --definition-dir directly. Requires --confirm-in-place.")
-    parser.add_argument(
-        "--confirm-in-place",
-        action="store_true",
-        help="Required confirmation when --in-place is used.",
-    )
-    args = parser.parse_args(argv)
-    if not args.in_place and not args.output_dir:
-        parser.error("--output-dir is required unless --in-place is used")
-    if args.in_place and not args.confirm_in_place:
-        parser.error("--in-place requires --confirm-in-place")
-    return args
+    parser.add_argument("--output-dir", required=True, help="Fresh copied output definition folder.")
+    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     definition_dir = Path(args.definition_dir)
-    output_dir = Path(args.output_dir) if args.output_dir else definition_dir
     result = apply_powerbi_patch(
         definition_dir=definition_dir,
         patch_path=Path(args.patch),
-        output_dir=output_dir,
-        in_place=args.in_place,
-        confirm_in_place=args.confirm_in_place,
+        output_dir=Path(args.output_dir),
     )
     print(f"Power BI patch {'applied' if result.success else 'failed'}")
     print(f"Report: {relative_posix(result.report_path)}")

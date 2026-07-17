@@ -126,7 +126,9 @@ python -m semantic_poc.src.deploy_snowflake_semantic_view --apply
 
 The deployment command verifies first, then calls Snowflake only with `--apply`. After creation it checks that the semantic view exists, inspects public metrics where metadata inspection is available, and runs representative semantic-view queries for `valid_sbr_finishers` and `event_context_rate`.
 
-Apply the safe Power BI metadata patch to a copied definition folder:
+## Applying a Power BI metadata patch
+
+The patch command always creates a complete copied definition folder. It does not offer in-place editing and never modifies the source definition:
 
 ```bash
 python -m semantic_poc.src.apply_powerbi_patch \
@@ -135,7 +137,7 @@ python -m semantic_poc.src.apply_powerbi_patch \
   --output-dir semantic_poc/output/patched_powerbi_definition
 ```
 
-Review the copied TMDL changes before using them:
+Review the directory diff before using the copy. The output directory must be new, so remove or rename a previous local output only after reviewing it:
 
 ```bash
 git diff --no-index \
@@ -143,7 +145,9 @@ git diff --no-index \
   semantic_poc/output/patched_powerbi_definition
 ```
 
-The patch command generates `semantic_poc/output/powerbi_patch_result.md`. It only applies approved metadata operations to the copied definition; relationship drift, DAX changes, lineage changes, partitions, roles, calculation groups, Power Query, and report files remain outside the safe patch scope. After review, open a copied PBIP or manually copy the patched definition back for final Power BI validation.
+To validate in Power BI, first copy the entire PBIP project to a separate working location. Close Power BI Desktop before replacing that copied project's `SemanticModel/definition` folder with `patched_powerbi_definition`, then reopen Desktop and validate the model. Do not replace externally edited PBIP files while Desktop is open.
+
+The command generates `powerbi_patch_result.md`, `patched_powerbi_semantics.json`, and `patched_semantic_compatibility.md`. It applies only approved metadata operations. Relationship drift, including the distance relationship, remains a report-only manual decision; DAX, lineage tags, partitions, Power Query, roles, calculation groups, and report files remain outside the patch scope.
 
 ## Generated Outputs
 
@@ -153,6 +157,8 @@ Generated outputs include:
 - `semantic_poc/output/powerbi_semantics.json`
 - `semantic_poc/output/proposed_powerbi_patch.json`
 - `semantic_poc/output/powerbi_patch_result.md`
+- `semantic_poc/output/patched_powerbi_semantics.json`
+- `semantic_poc/output/patched_semantic_compatibility.md`
 - `semantic_poc/output/snowflake_semantic_view.yml`
 - `semantic_poc/output/snowflake_verification.json`
 - `semantic_poc/output/snowflake_verification.md`
