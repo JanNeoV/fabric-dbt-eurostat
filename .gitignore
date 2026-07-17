@@ -1,5 +1,56 @@
-
+# dbt artifacts and logs
 target/
 dbt_modules/
+dbt_packages/
 logs/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tmp/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local secrets and machine config
+.env
+.env.*
+!.env.example
+profiles.yml
+
+# Power BI Desktop local state and caches
+pbi/**/.pbi/
+*.abf
+*.pbix
+
+# OS/editor noise
 **/.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local data extracts
+data/raw/coachcox_results/*.csv
+seeds/coachcox_results_raw.csv
+seeds/coachcox_seed_manifest.csv
+
+# Keep committed POC example outputs, but regenerate them locally as needed.
+!semantic_poc/output/
+!semantic_poc/output/**
+semantic_poc/output/patched_powerbi_definition/
+semantic_poc/output/snowflake_verification.json
+semantic_poc/output/snowflake_verification.md
+
+# Local semantic-agent change requests
+semantic_poc/changes/*
+!semantic_poc/changes/.gitkeep
