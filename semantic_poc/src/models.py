@@ -7,6 +7,16 @@ from typing import Any
 
 import yaml
 
+from .semantic_ir import (
+    MetricPattern,
+    SemanticMetricIR,
+    SupportClassification,
+    build_metric_ir_index,
+    generate_dax_definition,
+    generate_snowflake_definition,
+    validate_cross_target,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DBT_SEMANTIC_YAML = PROJECT_ROOT / "models" / "semantic" / "triathlon_semantic.yml"
@@ -252,6 +262,7 @@ def normalize_metric(
     measures_by_name: dict[str, dict[str, Any]],
     dimensions: list[dict[str, Any]],
     is_public: bool,
+    metric_ir: SemanticMetricIR | None = None,
 ) -> dict[str, Any]:
     type_params = metric.get("type_params", {}) or {}
     measure_name = metric_ref_name(type_params.get("measure"))
@@ -259,6 +270,12 @@ def normalize_metric(
     denominator = metric_ref_name(type_params.get("denominator"))
     measure = measures_by_name.get(measure_name or "")
     pattern = metric_translation_pattern(metric.get("type"), measure, numerator, denominator)
+    if metric_ir is not None:
+        pattern = {
+            MetricPattern.COUNT: "basic_count",
+            MetricPattern.FILTERED_COUNT: "filtered_count",
+            MetricPattern.RATIO: "ratio",
+        }.get(metric_ir.pattern, STATUS_MANUAL_REVIEW_REQUIRED)
     semantic_meta = meta.get("semantic_contract", {}) or {}
 
     return {
@@ -271,14 +288,26 @@ def normalize_metric(
         "denominator": denominator,
         "measure_agg": measure.get("agg") if measure else None,
         "measure_expression": measure.get("expr") if measure else None,
-        "filter_column": parse_boolean_filter_column(measure.get("expr") if measure else None),
-        "source_model": measure.get("source_model") if measure else None,
+        "filter_column": (
+            metric_ir.filters[0].field
+            if metric_ir is not None and len(metric_ir.filters) == 1 and metric_ir.filters[0].value is True
+            else parse_boolean_filter_column(measure.get("expr") if measure else None)
+        ),
+        "source_model": (
+            metric_ir.source_semantic_model
+            if metric_ir is not None and metric.get("type") == "simple"
+            else measure.get("source_model") if measure else None
+        ),
         "dimensions": [dimension.get("name") for dimension in dimensions],
         "format": semantic_meta.get("format"),
         "caveat": semantic_meta.get("caveat"),
         "public": is_public,
         "translation_pattern": pattern,
-        "snowflake_supported": pattern in {"filtered_count", "basic_count", "ratio"},
+        "snowflake_supported": (
+            metric_ir.support is SupportClassification.SUPPORTED_PATTERN
+            if metric_ir is not None
+            else pattern in {"filtered_count", "basic_count", "ratio"}
+        ),
         "power_bi": meta.get("power_bi", {}) or {},
         "snowflake": meta.get("snowflake", {}) or {},
         "meta": meta,
@@ -300,6 +329,12 @@ def normalize_dbt_semantics(
     dimensions = get_semantic_model_dimensions(semantic_manifest)
     measures_by_name = get_measures_by_name(semantic_manifest)
     public_names = public_metric_names(dbt_yaml)
+    canonical_source = relative_posix(semantic_yaml_path, project_root)
+    metric_ir_index = build_metric_ir_index(
+        semantic_manifest,
+        dbt_yaml,
+        canonical_source=canonical_source,
+    )
 
     missing_after_parse = [name for name in required_metrics if name not in metrics_by_name]
     if missing_after_parse:
@@ -329,6 +364,7 @@ def normalize_dbt_semantics(
             measures_by_name,
             dimensions,
             name in public_names,
+            metric_ir_index.get(name),
         )
         for name in metric_names
     }
@@ -336,7 +372,7 @@ def normalize_dbt_semantics(
     semantic_model = semantic_manifest.get("semantic_models", [{}])[0] if semantic_manifest.get("semantic_models") else {}
     contract_meta = get_semantic_model_contract(dbt_yaml)
     return {
-        "canonical_source": relative_posix(semantic_yaml_path, project_root),
+        "canonical_source": canonical_source,
         "compiled_source": relative_posix(semantic_manifest_path, project_root),
         "semantic_model": {
             "name": semantic_model.get("name"),
@@ -537,7 +573,30 @@ def find_powerbi_measure(powerbi: dict[str, Any], table_name: str, measure_name:
     return powerbi.get("tables", {}).get(table_name, {}).get("measures", {}).get(measure_name)
 
 
+def load_default_metric_ir_index(dbt_semantics: dict[str, Any]) -> dict[str, SemanticMetricIR]:
+    if dbt_semantics.get("canonical_source") != CANONICAL_SOURCE:
+        return {}
+    if not DBT_SEMANTIC_MANIFEST.is_file() or not DBT_SEMANTIC_YAML.is_file():
+        return {}
+    try:
+        return build_metric_ir_index(
+            load_json(DBT_SEMANTIC_MANIFEST),
+            load_yaml(DBT_SEMANTIC_YAML),
+            canonical_source=CANONICAL_SOURCE,
+        )
+    except (KeyError, TypeError, ValueError):
+        return {}
+
+
 def expected_dax(metric: dict[str, Any], all_metrics: dict[str, dict[str, Any]]) -> str | None:
+    ir_index = load_default_metric_ir_index(
+        {"canonical_source": CANONICAL_SOURCE, "metrics": all_metrics}
+    )
+    metric_ir = ir_index.get(metric.get("name") or "")
+    if metric_ir is not None:
+        generated = generate_dax_definition(metric_ir, ir_index)
+        if generated.support is SupportClassification.SUPPORTED_PATTERN:
+            return generated.definition
     pattern = metric.get("translation_pattern")
     if pattern == "filtered_count" and metric.get("filter_column"):
         return f"CALCULATE( COUNTROWS(fct_result), fct_result[{metric['filter_column']}] = TRUE() )"
@@ -736,6 +795,7 @@ def build_snowflake_semantic_view(dbt_semantics: dict[str, Any], environment: di
         )
 
     metrics = dbt_semantics.get("metrics", {})
+    metric_ir_index = load_default_metric_ir_index(dbt_semantics)
     public_names = set(dbt_semantics.get("public_metrics", []))
     derived_metrics: list[dict[str, Any]] = []
     unsupported: list[dict[str, str]] = []
@@ -747,6 +807,18 @@ def build_snowflake_semantic_view(dbt_semantics: dict[str, Any], environment: di
             return
         metric_name = metric.get("snowflake", {}).get("metric_name") or metric["name"]
         if any(existing["name"] == metric_name for existing in table_entry.setdefault("metrics", [])):
+            return
+        metric_ir = metric_ir_index.get(metric["name"])
+        generated = generate_snowflake_definition(metric_ir, metric_ir_index) if metric_ir else None
+        if generated and generated.support is SupportClassification.SUPPORTED_PATTERN and generated.definition:
+            dax = generate_dax_definition(metric_ir, metric_ir_index)
+            consistency = validate_cross_target(metric_ir, dax, generated)
+            if consistency.valid:
+                table_entry["metrics"].append(generated.definition)
+                return
+            unsupported.append(
+                {"metric": metric["name"], "reason": SupportClassification.MANUAL_REVIEW_REQUIRED.value}
+            )
             return
         if metric["translation_pattern"] == "filtered_count":
             expr = f"COUNT_IF({metric['filter_column']})"
@@ -779,6 +851,16 @@ def build_snowflake_semantic_view(dbt_semantics: dict[str, Any], environment: di
         denominator = metrics.get(metric.get("denominator") or "")
         if not numerator or not denominator:
             unsupported.append({"metric": name, "reason": "missing ratio support metric"})
+            continue
+        metric_ir = metric_ir_index.get(name)
+        generated = generate_snowflake_definition(metric_ir, metric_ir_index) if metric_ir else None
+        if generated and generated.support is SupportClassification.SUPPORTED_PATTERN and generated.definition:
+            dax = generate_dax_definition(metric_ir, metric_ir_index)
+            consistency = validate_cross_target(metric_ir, dax, generated)
+            if consistency.valid:
+                derived_metrics.append(generated.definition)
+                continue
+            unsupported.append({"metric": name, "reason": SupportClassification.MANUAL_REVIEW_REQUIRED.value})
             continue
         logical_table = metric.get("snowflake", {}).get("logical_table") or "results"
         numerator_name = numerator.get("snowflake", {}).get("metric_name") or numerator["name"]
