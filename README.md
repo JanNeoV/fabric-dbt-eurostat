@@ -1,5 +1,10 @@
+# Microsoft Fabric + dbt — Eurostat Analytics Engineering
 
-# Fabric Eurostat DBT Project
+**Portfolio case study | Microsoft Fabric · dbt · dimensional data modeling**
+
+A compact, tutorial-derived example of transforming European public statistics into **source, staging and mart layers** in a Microsoft Fabric Warehouse. The project documents dimensional relationships and declarative model tests; a running Fabric environment is required to execute warehouse transformations.
+
+**Explore:** [Project overview](#project-overview) · [Energy Markets in Power BI](https://github.com/JanNeoV/public_energy_markets) · [Power BI Semantic Assurance](https://github.com/JanNeoV/pbi-osi-converter)
 
 This repository demonstrates using [dbt](https://www.getdbt.com/) with **Microsoft Fabric** to transform data sourced from **Eurostat**. It is based on:
 
@@ -65,8 +70,8 @@ az --version
 
 1. **Clone this repository**:
    ```bash
-   git clone https://github.com/YourOrg/fabric-eurostat-dbt.git
-   cd fabric-eurostat-dbt
+   git clone https://github.com/JanNeoV/fabric-dbt-eurostat.git
+   cd fabric-dbt-eurostat
    ```
 
 2. **Configure `profiles.yml`** (in `~/.dbt/` or another location).  
@@ -103,7 +108,7 @@ az --version
 
 ## Contributing / Issues
 
-- Please [open an issue](https://github.com/YourOrg/fabric-eurostat-dbt/issues) if you encounter problems or have questions.
+- Please [open an issue](https://github.com/JanNeoV/fabric-dbt-eurostat/issues) if you encounter problems or have questions.
 - Pull requests are welcome, whether for new features, improved docs, or bug fixes.
 
 ## Credits
